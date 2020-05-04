@@ -267,12 +267,12 @@ def find_bias_anomalies(exposures, amp_num=None, verbose=False,\
                     if line[0] == run_num and line[1] == raft \
                     and line[2] == detector_name and line[3] == lsst_num:
                         if recompute == False:
-                            print('Sensor {} - {} - {} has been checked for run {}'.format(lsst_num, raft, detector_name,lsst_num, run_num))
+                            print('Sensor {} - {} - {} has been checked for run {}'.format(raft, detector_name,lsst_num, run_num))
                             return
         except IOError:
             with open(filename,'w') as f:
                 out_anomalies = csv.writer(f)
-                header = ['Run', 'Raft Slot', 'CCD Slot', 'LSST Name', 'Anomaly Significance']
+                header = ['Run', 'Raft Slot', 'CCD Slot', 'LSST Name', 'Anomaly Significance', 'Structure']
                 out_anomalies.writerow(header)
         anomaliesfile = filename
             
@@ -286,14 +286,23 @@ def find_bias_anomalies(exposures, amp_num=None, verbose=False,\
             os.makedirs(outdir, exist_ok=True)
         try:
             with open(filename, 'r') as f:
-                print('Sensor {} - {} - {} has been checked for run {}'.format(run_num, raft, detector_name,lsst_num, run_num))
+                print('Sensor {} - {} - {} has been checked for run {}'.format( raft, detector_name,lsst_num, run_num))
                 return
         except IOError:
             with open(filename,'w') as f:
                 out = csv.writer(f)
-                header = ['Amp', 'First Exposure Bias (ADU)', 'Median Without First (ADU)', 'Median Variance (ADU)', 'Variation of First (ADU)', 'Anomaly Significance']
+                header = ['Amp', 'First Exposure Bias (ADU)', 'Median Without First (ADU)', 'Median Variance (ADU)', 'Variation of First (ADU)', 'Anomaly Significance', 'Structure']
                 out.writerow(header)
         outfile = filename
+        
+    try: 
+        f = open("bias_anomalies/checked.csv",'r')
+        f.close()
+    except IOError:
+        with open("bias_anomalies/checked.csv", 'w') as f:
+            out = csv.writer(f)
+            header = ['Run', 'Raft Slot', 'CCD Slot', 'LSST Name', 'Anomaly Significance', 'Structure']
+            out.writerow(header)
 
     
     ampnames = []
@@ -303,6 +312,7 @@ def find_bias_anomalies(exposures, amp_num=None, verbose=False,\
     median_devs   = []
     diffs         = []
     significances = []
+    structures    = []
     
     
     detector = exposures[0].getDetector()
@@ -318,49 +328,111 @@ def find_bias_anomalies(exposures, amp_num=None, verbose=False,\
         
         for expnum in range(1, len(exposures)):
             im_list.append(exposures[expnum].getMaskedImage()[amp.getRawDataBBox()].getImage().getArray())
+        
         median_im = np.median(np.array(im_list), axis=0)
+        
+        median = np.median(median_im)
+        first_median = np.median(exposures[0].getMaskedImage()[amp.getRawDataBBox()].getImage().getArray())  
+        
         med_dev = np.mean(np.square(np.array([im - median_im for im in im_list])))
         
         diff_im = exposures[0].getMaskedImage()[amp.getRawDataBBox()].getImage().getArray() - median_im
         
-        diff_rms = np.sqrt(np.mean(np.square(diff_im)))
+        diff_ms = np.mean(np.square(diff_im))
+        diff_rms = np.sqrt(diff_ms)
+        
+        structure = np.sqrt(diff_ms - (median - first_median)**2)/med_dev
         
         if diff_rms/med_dev >= 1 and verbose:
             print('Amp {} - Exposure 0 deviation= {}; Mean of 1-4 deviations= {}'.format(ampnames[ampnum], diff_rms, med_dev))
+  
         
-        median = np.median(median_im)
-        first_bias = np.median(exposures[0].getMaskedImage()[amp.getRawDataBBox()].getImage().getArray())    
-        
-        first_biases.append(first_bias)
+        first_biases.append(first_median)
         medians.append(median)
         median_devs.append(med_dev)
         diffs.append(diff_rms)
         significances.append(diff_rms/med_dev)
+        structures.append(structure)
         
     if outfile is not None:
         with open(outfile, 'a') as f:
             out = csv.writer(f)
             for i in range(len(medians)):
-                out.writerow([ampnames[i], first_biases[i], medians[i], median_devs[i], diffs[i], significances[i]])
+                out.writerow([ampnames[i], first_biases[i], medians[i], median_devs[i], diffs[i], significances[i], structures[i]])
              
     if max(significances) > 1:
         with open(anomaliesfile, 'a')  as f:
             out = csv.writer(f)
-            out.writerow([run_num, raft, detector_name, lsst_num, max(significances)])
+            out.writerow([run_num, raft, detector_name, lsst_num, max(significances), max(structures)])
             
     try: 
         with open("bias_anomalies/checked.csv", 'a') as f:
             out = csv.writer(f)
-            out.writerow([run_num, raft, detector_name, lsst_num, max(significances)])
+            out.writerow([run_num, raft, detector_name, lsst_num, max(significances), max(structures)])
     except IOError:
         with open("bias_anomalies/checked.csv", 'w') as f:
             out = csv.writer(f)
-            header = ['Run', 'Raft Slot', 'CCD Slot', 'LSST Name', 'Anomaly Significance']
+            header = ['Run', 'Raft Slot', 'CCD Slot', 'LSST Name', 'Anomaly Significance', 'Structure']
             out.writerow(header)
-            out.writerow([run_num, raft, detector_name, lsst_num, max(significances)])
+            out.writerow([run_num, raft, detector_name, lsst_num, max(significances), max(structures)])
     
     return
 
+def is_checked(run, raft, ccd):
+    try:
+        with open('bias_anomalies/checked.csv', 'r') as f:
+            reader = csv.reader(f)
+            for line in reader:
+                if line[:3] == [run,raft,ccd]:
+                    return True
+            return False
+    except IOError:
+        return False
+    
+def get_bias_exposures(detector_name, raft_name, chosen_runs, nexps=5, verbose=False):
+    exposures = []
+    for run in chosen_runs:
+        num_visits = min(len(biases_by_run[run]), nexps)
+        if num_visits <= 2: 
+            if verbose: print('Too few exposures in run {}'.format(run))
+            continue
+        first_few_visits = biases_by_run[run][:num_visits]
+        first_few_images = []
+        if verbose: print('Run {}'.format(run))
+        for visit in first_few_visits:
+            dId = {'visit': visit, 'raftName': raft_name,'detectorName': detector_name}
+            if verbose: print(dId)
+            raw = butler.get('raw', dId)
+            first_few_images.append(raw)
+        exposures.append(first_few_images)
+    return exposures
+
+def find_anomalies_in_runs(runs):
+    logger = logging.basicConfig(filename='anomalies.log', level=logging.INFO, format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
+
+    chosen_runs = runs
+    fail_count = 0
+    success_count = 0
+    for run in chosen_runs:
+        print("Run {}".format(run))
+        for raft in rafts:
+            for ccd in slots:
+                logging.info('*** Trying: {}, {}, {} ***'.format(run,raft,ccd))
+                fail_count += 1
+                if is_checked(run, raft, ccd):
+                    logging.info('Already checked: {}, {}, {}'.format(run,raft,ccd))
+                    continue
+                try:
+                    exposures = get_bias_exposures(ccd, raft, [run], verbose=False)
+                    exposure = exposures[0]
+                except :
+                    logging.warning("NoResult error\n")
+                    continue
+                bias_tools.find_bias_anomalies(exposure, plot_medians=True, outfile=True, anomaliesfile=True)
+                del exposures
+                logging.info("Success\n")
+                success_count += 1
+                fail_count -= 1
 
         
     
