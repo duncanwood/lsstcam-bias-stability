@@ -60,12 +60,14 @@ class PCA_Corrector:
     serial_pca = None
     parallel_pca = None
     amp_num = None
-    n_components = None
+    n_comp_x = None
+    n_comp_y = None
     
-    def __init__(self, biases, ampnum, ncomponents=7):
-        n_components = ncomponents
-        self.serial_pca = PCA(n_components=n_components)
-        self.parallel_pca = PCA(n_components=n_components)
+    def __init__(self, biases, ampnum, ncomp_x=6, ncomp_y=8):
+        self.n_comp_x = ncomp_x
+        self.n_comp_y = ncomp_x
+        self.serial_pca = PCA(n_components=ncomp_x)
+        self.parallel_pca = PCA(n_components=ncomp_y)
         self.amp_num = ampnum
         
         bias_data = []
