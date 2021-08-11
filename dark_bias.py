@@ -6,7 +6,11 @@ import pandas as pd
 import astropy.time
 from lsst.daf.persistence import Butler
 import lsst.afw
-import lsst.eotest.image_utils as imutils
+try:
+    import lsst.eotest.image_utils as imutils
+except:
+    import eotest.image_utils as imutils
+    pass
 from pathlib import Path
 
 import sklearn.linear_model

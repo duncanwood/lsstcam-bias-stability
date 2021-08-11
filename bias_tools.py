@@ -2,7 +2,11 @@ import matplotlib.pyplot as plt
 import lsst.afw
 import lsst.afw.math as afwMath
 import numpy as np
-import lsst.eotest.image_utils as imutils
+try:
+    import lsst.eotest.image_utils as imutils
+except:
+    import eotest.image_utils as imutils
+    pass
 from pathlib import Path
 import os
 from mpl_toolkits.axes_grid1 import make_axes_locatable
